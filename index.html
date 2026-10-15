@@ -1,4 +1,4 @@
-a<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Colons — Édition Prestige · IA stratégique</title>
+<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Colons — Édition Prestige · IA stratégique</title>
 <style>
 :root{--ink:#2b2418;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
@@ -1062,7 +1062,19 @@ function draw(){
 // Le mode local continue d'utiliser exactement le moteur original.
 window.__net2d={active:false,slot:-1,remote:false,onDraw:null,
  export(){if(!G)return null;return {G:JSON.parse(JSON.stringify(G,(k,v)=>v instanceof Set?[...v]:v)),H:JSON.parse(JSON.stringify(H)),V:JSON.parse(JSON.stringify([...V.entries()])),E:JSON.parse(JSON.stringify([...E.entries()])),PT:JSON.parse(JSON.stringify(PT)),cfg:{ck:cfg.ck,vp:cfg.vp,lim:cfg.lim,bal:cfg.bal,fr:cfg.fr,map:cfg.map}}},
- load(snapshot){if(!snapshot||!snapshot.G)return;this.remote=true;try{G=snapshot.G;G.seen=G.seen==null?null:new Set(Array.isArray(G.seen)?G.seen:[]);H=snapshot.H;V=new Map(snapshot.V);E=new Map(snapshot.E);PT=snapshot.PT;Object.assign(cfg,snapshot.cfg||{});KEYS=G.ck?['l','b','w','g','o','c','i','p']:['l','b','w','g','o'];draw()}finally{this.remote=false}},
+ load(snapshot){if(!snapshot||!snapshot.G)return;this.remote=true;try{G=snapshot.G;
+ // Firebase RTDB supprime les tableaux vides dans les objets JSON.
+ // Restaurer les champs attendus par le moteur avant tout draw().
+ for(const k of ['fx','log','deck','bag','seq','P','discardQueue'])if(!Array.isArray(G[k]))G[k]=[];
+ for(const p of G.P){
+   for(const k of ['dv','hand'])if(!Array.isArray(p[k]))p[k]=[];
+   if(!p.r)p.r={};if(!p.imp)p.imp={t:0,p:0,s:0};
+ }
+ G.seen=G.seen==null?null:new Set(Array.isArray(G.seen)?G.seen:[]);
+ H=Array.isArray(snapshot.H)?snapshot.H:[];
+ V=new Map(Array.isArray(snapshot.V)?snapshot.V:Object.values(snapshot.V||{}));
+ E=new Map(Array.isArray(snapshot.E)?snapshot.E:Object.values(snapshot.E||{}));
+ PT=Array.isArray(snapshot.PT)?snapshot.PT:[];Object.assign(cfg,snapshot.cfg||{});KEYS=G.ck?['l','b','w','g','o','c','i','p']:['l','b','w','g','o'];draw()}finally{this.remote=false}},
  begin(names){this.remote=true;try{cfg.pl=names.map(name=>({name,bot:0}));cfg.ck=0;cfg.vp=10;startGame()}finally{this.remote=false}return this.export()},
  canAct(){if(!this.active||!G)return true;const actor=G.phase==='discard'&&G.discardQueue?.length?G.discardQueue[0].i:G.cur;return actor===this.slot}
 };
