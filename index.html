@@ -1066,11 +1066,19 @@ window.__net2d={active:false,slot:-1,remote:false,onDraw:null,
  // Firebase RTDB supprime les tableaux vides dans les objets JSON.
  // Restaurer les champs attendus par le moteur avant tout draw().
  for(const k of ['fx','log','deck','bag','seq','P','discardQueue'])if(!Array.isArray(G[k]))G[k]=[];
+ // Les objets vides sont omis par Realtime Database : les recréer explicitement.
+ if(!G.met||typeof G.met!=='object'||Array.isArray(G.met))G.met={};
+ if(!Array.isArray(G.log))G.log=[];
+ if(!G.P.length)throw new Error('État réseau invalide : joueurs absents');
  for(const p of G.P){
    for(const k of ['dv','hand'])if(!Array.isArray(p[k]))p[k]=[];
-   if(!p.r)p.r={};if(!p.imp)p.imp={t:0,p:0,s:0};
+   if(!p.r||typeof p.r!=='object')p.r={};
+   for(const k of ['l','b','w','g','o','c','i','p'])if(!Number.isFinite(p.r[k]))p.r[k]=0;
+   if(!p.imp||typeof p.imp!=='object')p.imp={};
+   for(const k of ['t','p','s'])if(!Number.isFinite(p.imp[k]))p.imp[k]=0;
+   if(!Number.isFinite(p.bonus))p.bonus=0;
  }
- G.seen=G.seen==null?null:new Set(Array.isArray(G.seen)?G.seen:[]);
+ G.seen=G.seen==null?null:new Set(Array.isArray(G.seen)?G.seen:Object.values(G.seen||{}));
  H=Array.isArray(snapshot.H)?snapshot.H:[];
  V=new Map(Array.isArray(snapshot.V)?snapshot.V:Object.values(snapshot.V||{}));
  E=new Map(Array.isArray(snapshot.E)?snapshot.E:Object.values(snapshot.E||{}));
@@ -1112,7 +1120,7 @@ function watchGame(c){if(gameUnsub)gameUnsub();gameRevision=-1;pendingRemote=nul
  gameUnsub=onValue(ref(db,'rooms/'+c+'/game'),snap=>{const g=snap.val();if(!g)return;
   if(g.revision<=gameRevision)return;
   gameRevision=g.revision;
-  if(!gameWriting&&!gameDirty)syncGame(g.snapshot);
+  if(!gameWriting&&!gameDirty){try{syncGame(g.snapshot)}catch(err){console.error('[Catan réseau] Échec de restauration du plateau',err);status('Erreur de chargement du plateau : '+err.message)}}
   else if(gameWriting||gameDirty)pendingRemote=g;
   updateGameNote('Plateau partagé · '+(g.snapshot?.G?.phase==='setup'?'Placement initial':g.snapshot?.G?.phase==='end'?'Partie terminée':'Tour de '+(g.snapshot?.G?.P?.[g.snapshot.G.cur]?.name||'?')));
  },e=>status('Lecture du plateau refusée : '+e.message));}
