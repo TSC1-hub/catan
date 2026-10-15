@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Colons — Édition Prestige · IA stratégique</title>
+a<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Colons — Édition Prestige · IA stratégique</title>
 <style>
 :root{--ink:#2b2418;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
@@ -1061,8 +1061,8 @@ function draw(){
 // Passerelle expérimentale pour le plateau partagé (jeu de base uniquement).
 // Le mode local continue d'utiliser exactement le moteur original.
 window.__net2d={active:false,slot:-1,remote:false,onDraw:null,
- export(){if(!G)return null;return {G:JSON.parse(JSON.stringify(G)),H:JSON.parse(JSON.stringify(H)),V:JSON.parse(JSON.stringify([...V.entries()])),E:JSON.parse(JSON.stringify([...E.entries()])),PT:JSON.parse(JSON.stringify(PT)),cfg:{ck:cfg.ck,vp:cfg.vp,lim:cfg.lim,bal:cfg.bal,fr:cfg.fr,map:cfg.map}}},
- load(snapshot){if(!snapshot||!snapshot.G)return;this.remote=true;try{G=snapshot.G;H=snapshot.H;V=new Map(snapshot.V);E=new Map(snapshot.E);PT=snapshot.PT;Object.assign(cfg,snapshot.cfg||{});KEYS=G.ck?['l','b','w','g','o','c','i','p']:['l','b','w','g','o'];draw()}finally{this.remote=false}},
+ export(){if(!G)return null;return {G:JSON.parse(JSON.stringify(G,(k,v)=>v instanceof Set?[...v]:v)),H:JSON.parse(JSON.stringify(H)),V:JSON.parse(JSON.stringify([...V.entries()])),E:JSON.parse(JSON.stringify([...E.entries()])),PT:JSON.parse(JSON.stringify(PT)),cfg:{ck:cfg.ck,vp:cfg.vp,lim:cfg.lim,bal:cfg.bal,fr:cfg.fr,map:cfg.map}}},
+ load(snapshot){if(!snapshot||!snapshot.G)return;this.remote=true;try{G=snapshot.G;G.seen=G.seen==null?null:new Set(Array.isArray(G.seen)?G.seen:[]);H=snapshot.H;V=new Map(snapshot.V);E=new Map(snapshot.E);PT=snapshot.PT;Object.assign(cfg,snapshot.cfg||{});KEYS=G.ck?['l','b','w','g','o','c','i','p']:['l','b','w','g','o'];draw()}finally{this.remote=false}},
  begin(names){this.remote=true;try{cfg.pl=names.map(name=>({name,bot:0}));cfg.ck=0;cfg.vp=10;startGame()}finally{this.remote=false}return this.export()},
  canAct(){if(!this.active||!G)return true;const actor=G.phase==='discard'&&G.discardQueue?.length?G.discardQueue[0].i:G.cur;return actor===this.slot}
 };
