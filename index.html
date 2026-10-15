@@ -1057,9 +1057,26 @@ function draw(){
  G.fresh=false;if(G.fx.length){const L=G.fx;G.fx=[];fly(L)}const bt=G.phase==='discard'?!!G.discardQueue?.[0]&&G.P[G.discardQueue[0].i].bot:G.P[G.cur].bot&&G.phase!='end';$('mn').style.pointerEvents=$('pn').style.pointerEvents=bt?'none':'';if(bt&&!G.bt){G.bt=1;setTimeout(botStep,700)}document.querySelectorAll('.progress-preview-backdrop').forEach(e=>e.remove());
  if(G&&G.ck&&selectedProgress!==null){document.body.insertAdjacentHTML('beforeend',progressPreview(G.P[G.cur]));}
  }
+
+// Passerelle expérimentale pour le plateau partagé (jeu de base uniquement).
+// Le mode local continue d'utiliser exactement le moteur original.
+window.__net2d={active:false,slot:-1,remote:false,onDraw:null,
+ export(){if(!G)return null;return {G:JSON.parse(JSON.stringify(G)),H:JSON.parse(JSON.stringify(H)),V:JSON.parse(JSON.stringify([...V.entries()])),E:JSON.parse(JSON.stringify([...E.entries()])),PT:JSON.parse(JSON.stringify(PT)),cfg:{ck:cfg.ck,vp:cfg.vp,lim:cfg.lim,bal:cfg.bal,fr:cfg.fr,map:cfg.map}}},
+ load(snapshot){if(!snapshot||!snapshot.G)return;this.remote=true;try{G=snapshot.G;H=snapshot.H;V=new Map(snapshot.V);E=new Map(snapshot.E);PT=snapshot.PT;Object.assign(cfg,snapshot.cfg||{});KEYS=G.ck?['l','b','w','g','o','c','i','p']:['l','b','w','g','o'];draw()}finally{this.remote=false}},
+ begin(names){this.remote=true;try{cfg.pl=names.map(name=>({name,bot:0}));cfg.ck=0;cfg.vp=10;startGame()}finally{this.remote=false}return this.export()},
+ canAct(){if(!this.active||!G)return true;const actor=G.phase==='discard'&&G.discardQueue?.length?G.discardQueue[0].i:G.cur;return actor===this.slot}
+};
+const __netOriginalDraw=draw;
+draw=function(){__netOriginalDraw();if(window.__net2d.active&&!window.__net2d.remote&&G&&window.__net2d.onDraw)window.__net2d.onDraw()};
+// Interdire l'interaction sur les autres postes lorsque ce n'est pas leur tour.
+function __netBlock(ev){const n=window.__net2d;if(!n.active||!G||n.canAct())return;
+ const target=ev.target;if(target?.closest?.('#online-overlay,#online-entry'))return;
+ ev.preventDefault();ev.stopImmediatePropagation();}
+for(const type of ['click','pointerdown','change','input','keydown'])document.addEventListener(type,__netBlock,true);
+
 draw();
-</script><button id="online-entry" type="button" onclick="window.onlineOpen()">🌐 Jouer en ligne (test)</button>
-<div id="online-overlay" role="dialog" aria-modal="true" aria-label="Salon en ligne"><section id="online-panel"><h2>🌐 Salon multijoueur</h2><p class="muted">Étape 1 : salon et présence en temps réel. Les tours et le plateau ne sont pas encore synchronisés ; ne lancez pas de partie en ligne avec cette version.</p><div id="online-join"><label>Pseudo <input id="online-name" maxlength="20" placeholder="Ton pseudo" autocomplete="nickname"></label><p><button id="online-create">Créer un salon</button></p><label>Code <input id="online-code" maxlength="8" placeholder="ABCDEFGH" autocapitalize="characters"></label><button id="online-join-btn">Rejoindre</button></div><div id="online-room" hidden><p>Code du salon : <span class="room-code" id="online-room-code"></span></p><button id="online-copy">Copier le lien d'invitation</button><p><strong>Joueurs connectés</strong></p><ol id="online-players"></ol><p class="muted">Partie en ligne : en préparation. La version locale reste jouable avec le bouton habituel.</p><button id="online-leave">Quitter le salon</button></div><p id="online-status" role="status"></p><button onclick="window.onlineClose()" style="background:#637583">Fermer</button></section></div>
+</script><button id="online-entry" type="button" onclick="window.onlineOpen()">🌐 Jouer en ligne (plateau partagé)</button>
+<div id="online-overlay" role="dialog" aria-modal="true" aria-label="Salon en ligne"><section id="online-panel"><h2>🌐 Salon multijoueur</h2><p class="muted">Prototype réseau : plateau partagé et tours synchronisés pour le jeu de base. Les mains ne sont pas encore privées et les règles avancées ne sont pas sécurisées. Ne pas utiliser pour une partie compétitive.</p><div id="online-join"><label>Pseudo <input id="online-name" maxlength="20" placeholder="Ton pseudo" autocomplete="nickname"></label><p><button id="online-create">Créer un salon</button></p><label>Code <input id="online-code" maxlength="8" placeholder="ABCDEFGH" autocapitalize="characters"></label><button id="online-join-btn">Rejoindre</button></div><div id="online-room" hidden><p>Code du salon : <span class="room-code" id="online-room-code"></span></p><button id="online-copy">Copier le lien d'invitation</button><p><strong>Joueurs connectés</strong></p><ol id="online-players"></ol><p id="online-game-note" class="muted">En attente du lancement par l’hôte.</p><button id="online-start" hidden>Démarrer le plateau partagé (jeu de base)</button><button id="online-leave">Quitter le salon</button></div><p id="online-status" role="status"></p><button onclick="window.onlineClose()" style="background:#637583">Fermer</button></section></div>
 <script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {getAuth,signInAnonymously,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
@@ -1067,16 +1084,54 @@ import {getDatabase,ref,get,set,runTransaction,onValue,serverTimestamp} from 'ht
 const config={apiKey:'AIzaSyDYUxcFo6f544wRCV2Z8rXReLVFxc4UESo',authDomain:'catan-4b4f8.firebaseapp.com',databaseURL:'https://catan-4b4f8-default-rtdb.europe-west1.firebasedatabase.app',projectId:'catan-4b4f8',appId:'1:132116093646:web:4b332a0df7c53592f10e9f'};
 const app=initializeApp(config),auth=getAuth(app),db=getDatabase(app);
 const el=id=>document.getElementById(id),status=t=>el('online-status').textContent=t;
-let room='',slot=-1,unsub=null,uid='';
+let room='',slot=-1,unsub=null,gameUnsub=null,uid='',gameRevision=-1,gameWriting=false,gameDirty=false,gameTimer=null;
 const cleanName=()=>el('online-name').value.trim().slice(0,20)||'Joueur';
 function code(){const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='';const a=crypto.getRandomValues(new Uint8Array(8));for(const x of a)r+=alphabet[x%alphabet.length];return r}
 async function login(){if(auth.currentUser)return auth.currentUser;const cred=await signInAnonymously(auth);return cred.user}
-function showRoom(c){room=c;el('online-room').hidden=false;el('online-join').hidden=true;el('online-room-code').textContent=c;history.replaceState(null,'',location.pathname+location.search+'#salon='+c);if(unsub)unsub();unsub=onValue(ref(db,'rooms/'+c),snap=>{const d=snap.val();if(!d){status('Ce salon n’existe plus.');return}el('online-players').replaceChildren();Object.entries(d.slots||{}).sort(([a],[b])=>Number(a)-Number(b)).forEach(([i,p])=>{if(!p)return;const li=document.createElement('li');li.textContent=p.name+(p.uid===uid?' (toi)':'');el('online-players').append(li)});status('Salon synchronisé. En attente du mode jeu réseau.');},e=>status('Lecture refusée : '+e.message))}
+function updateGameNote(t){el('online-game-note').textContent=t}
+function syncGame(snapshot){if(!snapshot?.G)return;window.__net2d.load(snapshot)}
+function watchGame(c){if(gameUnsub)gameUnsub();gameRevision=-1;
+ gameUnsub=onValue(ref(db,'rooms/'+c+'/game'),snap=>{const g=snap.val();if(!g)return;
+  if(g.revision<=gameRevision)return;
+  gameRevision=g.revision;
+  if(!gameWriting&&!gameDirty)syncGame(g.snapshot);
+  updateGameNote('Plateau partagé · '+(g.snapshot?.G?.phase==='setup'?'Placement initial':g.snapshot?.G?.phase==='end'?'Partie terminée':'Tour de '+(g.snapshot?.G?.P?.[g.snapshot.G.cur]?.name||'?')));
+ },e=>status('Lecture du plateau refusée : '+e.message));}
+function showRoom(c){room=c;window.__net2d.slot=slot;el('online-room').hidden=false;el('online-join').hidden=true;el('online-room-code').textContent=c;history.replaceState(null,'',location.pathname+location.search+'#salon='+c);if(unsub)unsub();
+ unsub=onValue(ref(db,'rooms/'+c),snap=>{const d=snap.val();if(!d){status('Ce salon n’existe plus.');return}
+  el('online-players').replaceChildren();Object.entries(d.slots||{}).sort(([a],[b])=>Number(a)-Number(b)).forEach(([i,p])=>{if(!p)return;const li=document.createElement('li');li.textContent=p.name+(p.uid===uid?' (toi)':'');el('online-players').append(li)});
+  el('online-start').hidden=!(slot===0&&!d.game&&Object.keys(d.slots||{}).length>=2);
+  if(d.game&&!window.__net2d.active){window.__net2d.active=true;window.__net2d.slot=slot;watchGame(c)}
+  if(!d.game)status('Salon synchronisé. L’hôte peut démarrer avec 2 à 4 joueurs.');
+ },e=>status('Lecture refusée : '+e.message));}
+function scheduleGameWrite(){if(!window.__net2d.active||window.__net2d.remote||!room||!window.__net2d.canAct())return;
+ gameDirty=true;clearTimeout(gameTimer);gameTimer=setTimeout(flushGame,120);}
+async function flushGame(){if(gameWriting||!gameDirty||!room)return;
+ gameWriting=true;gameDirty=false;const payload=window.__net2d.export();const c=room;
+ try{const r=ref(db,'rooms/'+c+'/game');const result=await runTransaction(r,old=>{
+  if(!old||!payload)return;
+  return {revision:old.revision+1,turnSlot:payload.G.cur,snapshot:payload};
+ },{applyLocally:false});
+ if(!result.committed){status('Action non synchronisée. Rechargement du plateau…');const fresh=(await get(r)).val();if(fresh)syncGame(fresh.snapshot)}
+ }catch(e){status('Écriture du plateau refusée : '+e.message);const fresh=(await get(ref(db,'rooms/'+c+'/game'))).val();if(fresh)syncGame(fresh.snapshot)}
+ finally{gameWriting=false;if(gameDirty)flushGame();}}
+window.__net2d.onDraw=scheduleGameWrite;
+el('online-start').onclick=async()=>{if(slot!==0||!room)return;
+ try{const data=(await get(ref(db,'rooms/'+room))).val();if(!data||data.game)throw Error('Partie déjà démarrée.');
+  const entries=Object.entries(data.slots||{}).sort(([a],[b])=>Number(a)-Number(b));
+  if(entries.length<2||entries.length>4)throw Error('Il faut 2 à 4 joueurs.');
+  // La version actuelle impose des emplacements contigus.
+  if(entries.some(([i],n)=>Number(i)!==n))throw Error('Les joueurs doivent occuper les places 1 à '+entries.length+'.');
+  const snapshot=window.__net2d.begin(entries.map(([,p])=>p.name));
+  await set(ref(db,'rooms/'+room+'/game'),{revision:0,turnSlot:0,snapshot});
+  status('Plateau partagé créé. Ferme cette fenêtre pour jouer.');
+ }catch(e){status('Démarrage impossible : '+e.message)}};
+
 async function join(c,create=false){try{status('Connexion à Firebase…');uid=(await login()).uid;const r=ref(db,'rooms/'+c);if(create){const result=await runTransaction(r,v=>v===null?{host:uid,createdAt:Date.now(),status:'waiting',slots:{'0':{uid,name:cleanName()}}}:undefined,{applyLocally:false});if(!result.committed)throw Error('Code déjà utilisé. Réessaie.');slot=0}else{const data=(await get(r)).val();if(!data)throw Error('Salon introuvable.');if(data.status!=='waiting')throw Error('Salon fermé.');const own=Object.entries(data.slots||{}).find(([,p])=>p?.uid===uid);if(own){slot=Number(own[0])}else{let ok=false;for(let i=0;i<4;i++){const x=ref(db,'rooms/'+c+'/slots/'+i);const result=await runTransaction(x,v=>v===null?{uid,name:cleanName()}:undefined,{applyLocally:false});if(result.committed){slot=i;ok=true;break}}if(!ok)throw Error('Salon complet (4 joueurs).')}}showRoom(c)}catch(e){status('Erreur : '+e.message)}}
 el('online-create').onclick=()=>join(code(),true);
 el('online-join-btn').onclick=()=>{const c=el('online-code').value.trim().toUpperCase();if(!/^[A-HJ-NP-Z2-9]{8}$/.test(c))return status('Code invalide (8 caractères).');join(c)};
 el('online-copy').onclick=async()=>{const link=location.origin+location.pathname+'#salon='+room;try{await navigator.clipboard.writeText(link);status('Lien copié.')}catch{status('Lien à copier : '+link)}};
-el('online-leave').onclick=async()=>{try{if(room&&slot>=0&&uid){const r=ref(db,'rooms/'+room+'/slots/'+slot);await runTransaction(r,v=>v?.uid===uid?null:undefined,{applyLocally:false})}}catch(e){status(e.message)}if(unsub)unsub();unsub=null;room='';slot=-1;el('online-room').hidden=true;el('online-join').hidden=false;history.replaceState(null,'',location.pathname+location.search);status('Salon quitté.')};
+el('online-leave').onclick=async()=>{try{if(room&&slot>=0&&uid){const r=ref(db,'rooms/'+room+'/slots/'+slot);await runTransaction(r,v=>v?.uid===uid?null:undefined,{applyLocally:false})}}catch(e){status(e.message)}if(unsub)unsub();if(gameUnsub)gameUnsub();unsub=null;gameUnsub=null;window.__net2d.active=false;window.__net2d.slot=-1;room='';slot=-1;el('online-room').hidden=true;el('online-join').hidden=false;history.replaceState(null,'',location.pathname+location.search);status('Salon quitté.')};
 window.onlineOpen=()=>el('online-overlay').classList.add('open');window.onlineClose=()=>el('online-overlay').classList.remove('open');
 const invite=location.hash.match(/^#salon=([A-HJ-NP-Z2-9]{8})$/);if(invite){el('online-code').value=invite[1];window.onlineOpen()}
 onAuthStateChanged(auth,u=>{if(u)uid=u.uid});
