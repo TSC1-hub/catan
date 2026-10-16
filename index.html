@@ -578,7 +578,7 @@ function start(n,ck){KEYS=ck?['l','b','w','g','o','c','i','p']:['l','b','w','g',
  pendingTrade=null;tradeQueue=[];tradeReset();G={ck,bar:0,atk:0,met:{},bag:[],n,seq,si:0,cur:0,phase:'setup',step:'settle',mode:null,rob:H.findIndex(h=>h.t=='d'),roll:null,redDie:null,eventDie:null,raidAnimation:0,log:['Pose ta première colonie.'],tg:null,fx:[],seen:null,tr:0,lr:null,la:null,free:0,yp:0,mp:0,dpl:0,dvo:0,deck:shuf([].concat(Array(14).fill('kn'),Array(5).fill('vp'),Array(2).fill('rb'),Array(2).fill('yp'),Array(2).fill('mo'))),
   P:Array.from({length:n},(_,i)=>({name:'Joueur '+(i+1),r:Object.fromEntries(KEYS.map(k=>[k,0])),imp:{t:0,p:0,s:0},bonus:0,hand:[],dv:[],ka:0}))};G.cur=seq[0];draw()}
 const tot=p=>KEYS.reduce((a,k)=>a+p.r[k],0),log=m=>{G.log.unshift(m);G.log.length=Math.min(G.log.length,6)};
-const vp=(i,pub)=>{let s=0;V.forEach(v=>{if(v.o===i)s+=v.c?2:1});return s+G.P[i].bonus+2*Object.values(G.met).filter(x=>x===i).length+(G.la===i?2:0)+(G.lr===i?2:0)+(pub?0:G.P[i].dv.filter(d=>d.t=='vp').length)};
+const vp=(i,pub)=>{let s=0;V.forEach(v=>{if(v.o===i)s+=v.c?2:1});return s+G.P[i].bonus+2*Object.values(G.met).filter(x=>x===i).length+(G.la===i?2:0)+(G.lr===i?2:0)+(pub?0:(G.P[i].dv||[]).filter(d=>d.t=='vp').length)};
 const aff=(p,c)=>Object.keys(c).every(k=>p.r[k]>=c[k]),pay=(p,c)=>Object.keys(c).forEach(k=>p.r[k]-=c[k]);
 function canS(v,p){if(v.o>=0||v.kn||v.adj.some(a=>V.get(a).o>=0))return false;
  return G.phase=='setup'||v.es.some(e=>E.get(e).o===p)}
@@ -1029,11 +1029,11 @@ function draw(){
  if(ph==='discard'&&G.discardQueue?.length){const q=G.discardQueue[0],dp=G.P[q.i];b+=`<div class="tp"><strong>${dp.name} : ${q.remaining} carte(s) à défausser</strong><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">${KEYS.map(k=>`<button class="chip" ${dp.r[k]&&!dp.bot?'':'disabled'} onclick="discardCard('${k}')">${IC[k]} ${dp.r[k]}</button>`).join('')}</div></div>`}
  if(ph=='steal')b+='<div class="tp">'+G.vic.map(o=>`<button onclick="steal(${o})">${G.P[o].name}</button>`).join('')+'</div>';
  if(G.yp||G.mp)b+=`<div class="tp"><small>${G.yp?'Invention : choisis '+G.yp+' ressource(s)':'Monopole : choisis une ressource'}</small><div>${KEYS.slice(0,5).map(k=>`<button class="chip" onclick="${G.yp?'pickY':'pickM'}('${k}')">${IC[k]}</button>`).join('')}</div></div>`;
- if((m||ph==='roll')&&G.dvo&&!G.ck)b+=`<div class="tp"><button ${m&&aff(p,DC)&&G.deck.length?'':'disabled'} onclick="buyD()">Acheter (🐑🌾⛰️) · ${G.deck.length} restantes</button>${p.dv.map((c,i)=>`<button ${c.n||G.dpl||c.t=='vp'?'disabled':''} onclick="playD(${i})">${DN[c.t]}${c.n?' (nouvelle)':''}</button>`).join('')}</div>`;
+ if((m||ph==='roll')&&G.dvo&&!G.ck)b+=`<div class="tp"><button ${m&&aff(p,DC)&&G.deck.length?'':'disabled'} onclick="buyD()">Acheter (🐑🌾⛰️) · ${G.deck.length} restantes</button>${(p.dv||[]).map((c,i)=>`<button ${c.n||G.dpl||c.t=='vp'?'disabled':''} onclick="playD(${i})">${DN[c.t]}${c.n?' (nouvelle)':''}</button>`).join('')}</div>`;
 
  b+=`<div class="play-dock"><div class="hd resource-hand">${cards}</div><div class="deck-build-actions" role="group" aria-label="Construction et échange">${action('🧱','Route',"mode('road')",ph!=='main'||(!aff(p,COST.road)&&!(G.free>0))||nR>=15,G.mode==='road','Route : bois + brique')}${action('🏠','Colonie',"mode('settle')",ph!=='main'||!aff(p,COST.settle)||nS>=5,G.mode==='settle','Colonie : bois + brique + mouton + blé')}${action('🏘️','Ville',"mode('city')",ph!=='main'||!aff(p,COST.city)||nC>=4,G.mode==='city','Ville : 3 minerais + 2 blés')}${action('🐴','Chevalier',"document.querySelector('.ck-dock')?.scrollIntoView({behavior:'smooth',block:'nearest'})",!G.ck||ph!=='main'||p.bot,false,'Accéder aux actions de chevalier')}${action('⇄','Échanger','tr()',ph!=='main'||p.bot,G.tr&&ph==='main','Échanger avec les joueurs ou la banque')}</div>${ph==='setup'?`<div class="deck-phase-hint" role="status">Placement initial : choisis directement un emplacement sur le plateau. Les actions du deck seront disponibles après le placement.</div>`:''}<div class="deck-turn-control" role="group" aria-label="Commande principale du tour">${ph==='roll'?`<button class="deck-primary deck-roll" onclick="deckRollAction()" aria-label="Lancer les dés"><span class="deck-primary-icon" aria-hidden="true">🎲</span><span class="deck-primary-label">Lancer les dés</span><span class="deck-primary-arrow" aria-hidden="true">›</span></button>`:ph==='main'?`<button class="deck-primary deck-end" onclick="deckEndAction()" ${G.yp||G.mp||G.free?'disabled':''} aria-label="Terminer le tour"><span class="deck-primary-icon" aria-hidden="true">⏭</span><span class="deck-primary-label">Terminer le tour</span><span class="deck-primary-arrow" aria-hidden="true">›</span></button>`:''}</div><div class="action-row" role="group" aria-label="Actions de jeu">`
   +ab('⇄','tr()',!m,null,G.tr?'on':'','Échange avec la banque')
-  +ab(G.ck?'🐴':'🃏',G.ck?"document.querySelector('.ck-dock')?.scrollIntoView({behavior:'smooth',block:'nearest'})":'dv()',G.ck?false:!(m||ph==='roll'),G.ck?p.hand.length:p.dv.length,G.dvo?'on':'','Cartes de développement')
+  +ab(G.ck?'🐴':'🃏',G.ck?"document.querySelector('.ck-dock')?.scrollIntoView({behavior:'smooth',block:'nearest'})":'dv()',G.ck?false:!(m||ph==='roll'),G.ck?(p.hand||[]).length:(p.dv||[]).length,G.dvo?'on':'','Cartes de développement')
   +ab(svg1(PC[G.cur],'r'),"mode('road')",!m||!aff(p,COST.road)||nR>=15,15-nR,G.mode=='road'?'on':'','Route')
   +ab(svg1(PC[G.cur],'s'),"mode('settle')",!m||!aff(p,COST.settle)||nS>=5,5-nS,G.mode=='settle'?'on':'','Colonie')
   +ab(svg1(PC[G.cur],'c'),"mode('city')",!m||!aff(p,COST.city)||nC>=4,4-nC,G.mode=='city'?'on':'','Ville')
@@ -1059,19 +1059,21 @@ function draw(){
  }
 
 // Passerelle expérimentale pour le plateau partagé (jeu de base uniquement).
+// Correctif V6: une route de placement change G.cur avant draw(); l'écriture ne doit pas être bloquée par canAct().
 // Le mode local continue d'utiliser exactement le moteur original.
 window.__net2d={active:false,slot:-1,remote:false,onDraw:null,
  export(){if(!G)return null;return {G:JSON.parse(JSON.stringify(G,(k,v)=>v instanceof Set?[...v]:v)),H:JSON.parse(JSON.stringify(H)),V:JSON.parse(JSON.stringify([...V.entries()])),E:JSON.parse(JSON.stringify([...E.entries()])),PT:JSON.parse(JSON.stringify(PT)),cfg:{ck:cfg.ck,vp:cfg.vp,lim:cfg.lim,bal:cfg.bal,fr:cfg.fr,map:cfg.map}}},
  load(snapshot){if(!snapshot||!snapshot.G)return;this.remote=true;try{G=snapshot.G;
  // Firebase RTDB supprime les tableaux vides dans les objets JSON.
  // Restaurer les champs attendus par le moteur avant tout draw().
- for(const k of ['fx','log','deck','bag','seq','P','discardQueue'])if(!Array.isArray(G[k]))G[k]=[];
+ for(const k of ['fx','log','deck','bag','seq','P','discardQueue'])if(!Array.isArray(G[k]))G[k]=G[k]&&typeof G[k]==='object'?Object.values(G[k]):[];
  // Les objets vides sont omis par Realtime Database : les recréer explicitement.
  if(!G.met||typeof G.met!=='object'||Array.isArray(G.met))G.met={};
  if(!Array.isArray(G.log))G.log=[];
  if(!G.P.length)throw new Error('État réseau invalide : joueurs absents');
  for(const p of G.P){
-   for(const k of ['dv','hand'])if(!Array.isArray(p[k]))p[k]=[];
+   if(!p||typeof p!=='object')throw new Error('Joueur réseau invalide');
+   for(const k of ['dv','hand'])if(!Array.isArray(p[k]))p[k]=p[k]&&typeof p[k]==='object'?Object.values(p[k]):[];
    if(!p.r||typeof p.r!=='object')p.r={};
    for(const k of ['l','b','w','g','o','c','i','p'])if(!Number.isFinite(p.r[k]))p.r[k]=0;
    if(!p.imp||typeof p.imp!=='object')p.imp={};
@@ -1079,13 +1081,14 @@ window.__net2d={active:false,slot:-1,remote:false,onDraw:null,
    if(!Number.isFinite(p.bonus))p.bonus=0;
  }
  G.seen=G.seen==null?null:new Set(Array.isArray(G.seen)?G.seen:Object.values(G.seen||{}));
- H=Array.isArray(snapshot.H)?snapshot.H:[];
+ H=Array.isArray(snapshot.H)?snapshot.H:Object.values(snapshot.H||{});
  V=new Map(Array.isArray(snapshot.V)?snapshot.V:Object.values(snapshot.V||{}));
  E=new Map(Array.isArray(snapshot.E)?snapshot.E:Object.values(snapshot.E||{}));
- PT=Array.isArray(snapshot.PT)?snapshot.PT:[];Object.assign(cfg,snapshot.cfg||{});KEYS=G.ck?['l','b','w','g','o','c','i','p']:['l','b','w','g','o'];draw()}finally{this.remote=false}},
+ PT=Array.isArray(snapshot.PT)?snapshot.PT:Object.values(snapshot.PT||{});Object.assign(cfg,snapshot.cfg||{});KEYS=G.ck?['l','b','w','g','o','c','i','p']:['l','b','w','g','o'];draw()}finally{this.remote=false}},
  begin(names){this.remote=true;try{cfg.pl=names.map(name=>({name,bot:0}));cfg.ck=0;cfg.vp=10;startGame()}finally{this.remote=false}return this.export()},
  canAct(){if(!this.active||!G)return true;const actor=G.phase==='discard'&&G.discardQueue?.length?G.discardQueue[0].i:G.cur;return actor===this.slot}
 };
+// Tolérance supplémentaire aux tableaux vides omis par Firebase.
 const __netOriginalDraw=draw;
 draw=function(){__netOriginalDraw();if(window.__net2d.active&&!window.__net2d.remote&&G&&window.__net2d.onDraw)window.__net2d.onDraw()};
 // Interdire l'interaction sur les autres postes lorsque ce n'est pas leur tour.
@@ -1119,8 +1122,7 @@ function syncGame(snapshot){if(!snapshot?.G)return;window.__net2d.load(snapshot)
 function watchGame(c){if(gameUnsub)gameUnsub();gameRevision=-1;pendingRemote=null;
  gameUnsub=onValue(ref(db,'rooms/'+c+'/game'),snap=>{const g=snap.val();if(!g)return;
   if(g.revision<=gameRevision)return;
-  gameRevision=g.revision;
-  if(!gameWriting&&!gameDirty){try{syncGame(g.snapshot)}catch(err){console.error('[Catan réseau] Échec de restauration du plateau',err);status('Erreur de chargement du plateau : '+err.message)}}
+  if(!gameWriting&&!gameDirty){try{syncGame(g.snapshot);gameRevision=g.revision}catch(err){console.error('[Catan réseau] Échec de restauration du plateau',err);status('Erreur de chargement du plateau : '+err.message)}}
   else if(gameWriting||gameDirty)pendingRemote=g;
   updateGameNote('Plateau partagé · '+(g.snapshot?.G?.phase==='setup'?'Placement initial':g.snapshot?.G?.phase==='end'?'Partie terminée':'Tour de '+(g.snapshot?.G?.P?.[g.snapshot.G.cur]?.name||'?')));
  },e=>status('Lecture du plateau refusée : '+e.message));}
@@ -1131,14 +1133,14 @@ function showRoom(c){room=c;window.__net2d.slot=slot;el('online-room').hidden=fa
   if(d.game&&!window.__net2d.active){window.__net2d.active=true;window.__net2d.slot=slot;watchGame(c)}
   if(!d.game)status('Salon synchronisé. L’hôte peut démarrer avec 2 à 4 joueurs.');
  },e=>status('Lecture refusée : '+e.message));}
-function scheduleGameWrite(){if(!window.__net2d.active||window.__net2d.remote||!room||!window.__net2d.canAct())return;
+function scheduleGameWrite(){if(!window.__net2d.active||window.__net2d.remote||!room)return;
  gameDirty=true;clearTimeout(gameTimer);gameTimer=setTimeout(flushGame,120);}
 async function flushGame(){if(gameWriting||!gameDirty||!room)return;
- gameWriting=true;gameDirty=false;const payload=window.__net2d.export();const c=room;
+ gameWriting=true;gameDirty=false;const payload=window.__net2d.export();const c=room;const baseRevision=gameRevision;
  try{const r=ref(db,'rooms/'+c+'/game');const result=await runTransaction(r,old=>{
   if(!old||!payload)return;
   // Ne jamais écraser une action adverse ni une version plus récente.
-  if(old.revision!==gameRevision || old.turnSlot!==slot)return;
+  if(old.revision!==baseRevision || old.turnSlot!==slot)return;
   return {revision:old.revision+1,turnSlot:payload.G.cur,snapshot:payload};
  },{applyLocally:false});
  if(!result.committed){status('Conflit réseau : restauration de la dernière version du plateau.');gameDirty=false;const fresh=(await get(r)).val();if(fresh){gameRevision=fresh.revision;syncGame(fresh.snapshot)}}
