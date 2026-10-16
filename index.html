@@ -1061,8 +1061,28 @@ function draw(){
 // Passerelle expérimentale pour le plateau partagé (jeu de base uniquement).
 // Le mode local continue d'utiliser exactement le moteur original.
 window.__net2d={active:false,slot:-1,remote:false,onDraw:null,
- export(){if(!G)return null;return {G:JSON.parse(JSON.stringify(G)),H:JSON.parse(JSON.stringify(H)),V:JSON.parse(JSON.stringify([...V.entries()])),E:JSON.parse(JSON.stringify([...E.entries()])),PT:JSON.parse(JSON.stringify(PT)),cfg:{ck:cfg.ck,vp:cfg.vp,lim:cfg.lim,bal:cfg.bal,fr:cfg.fr,map:cfg.map}}},
- load(snapshot){if(!snapshot||!snapshot.G)return;this.remote=true;try{G=snapshot.G;H=snapshot.H;V=new Map(snapshot.V);E=new Map(snapshot.E);PT=snapshot.PT;Object.assign(cfg,snapshot.cfg||{});KEYS=G.ck?['l','b','w','g','o','c','i','p']:['l','b','w','g','o'];draw()}finally{this.remote=false}},
+ export(){if(!G)return null;return {G:JSON.parse(JSON.stringify(G,(k,v)=>v instanceof Set?[...v]:v)),H:JSON.parse(JSON.stringify(H)),V:JSON.parse(JSON.stringify([...V.entries()])),E:JSON.parse(JSON.stringify([...E.entries()])),PT:JSON.parse(JSON.stringify(PT)),cfg:{ck:cfg.ck,vp:cfg.vp,lim:cfg.lim,bal:cfg.bal,fr:cfg.fr,map:cfg.map}}},
+ load(snapshot){if(!snapshot||!snapshot.G)return;this.remote=true;try{G=snapshot.G;
+ // Firebase RTDB supprime les tableaux vides dans les objets JSON.
+ // Restaurer les champs attendus par le moteur avant tout draw().
+ for(const k of ['fx','log','deck','bag','seq','P','discardQueue'])if(!Array.isArray(G[k]))G[k]=[];
+ // Les objets vides sont omis par Realtime Database : les recréer explicitement.
+ if(!G.met||typeof G.met!=='object'||Array.isArray(G.met))G.met={};
+ if(!Array.isArray(G.log))G.log=[];
+ if(!G.P.length)throw new Error('État réseau invalide : joueurs absents');
+ for(const p of G.P){
+   for(const k of ['dv','hand'])if(!Array.isArray(p[k]))p[k]=[];
+   if(!p.r||typeof p.r!=='object')p.r={};
+   for(const k of ['l','b','w','g','o','c','i','p'])if(!Number.isFinite(p.r[k]))p.r[k]=0;
+   if(!p.imp||typeof p.imp!=='object')p.imp={};
+   for(const k of ['t','p','s'])if(!Number.isFinite(p.imp[k]))p.imp[k]=0;
+   if(!Number.isFinite(p.bonus))p.bonus=0;
+ }
+ G.seen=G.seen==null?null:new Set(Array.isArray(G.seen)?G.seen:Object.values(G.seen||{}));
+ H=Array.isArray(snapshot.H)?snapshot.H:[];
+ V=new Map(Array.isArray(snapshot.V)?snapshot.V:Object.values(snapshot.V||{}));
+ E=new Map(Array.isArray(snapshot.E)?snapshot.E:Object.values(snapshot.E||{}));
+ PT=Array.isArray(snapshot.PT)?snapshot.PT:[];Object.assign(cfg,snapshot.cfg||{});KEYS=G.ck?['l','b','w','g','o','c','i','p']:['l','b','w','g','o'];draw()}finally{this.remote=false}},
  begin(names){this.remote=true;try{cfg.pl=names.map(name=>({name,bot:0}));cfg.ck=0;cfg.vp=10;startGame()}finally{this.remote=false}return this.export()},
  canAct(){if(!this.active||!G)return true;const actor=G.phase==='discard'&&G.discardQueue?.length?G.discardQueue[0].i:G.cur;return actor===this.slot}
 };
@@ -1071,12 +1091,13 @@ draw=function(){__netOriginalDraw();if(window.__net2d.active&&!window.__net2d.re
 // Interdire l'interaction sur les autres postes lorsque ce n'est pas leur tour.
 function __netBlock(ev){const n=window.__net2d;if(!n.active||!G||n.canAct())return;
  const target=ev.target;if(target?.closest?.('#online-overlay,#online-entry'))return;
+ if(ev.type==='keydown' && ![' ','r','R','s','S','c','C'].includes(ev.key))return;
  ev.preventDefault();ev.stopImmediatePropagation();}
 for(const type of ['click','pointerdown','change','input','keydown'])document.addEventListener(type,__netBlock,true);
 
 draw();
 </script><button id="online-entry" type="button" onclick="window.onlineOpen()">🌐 Jouer en ligne (plateau partagé)</button>
-<div id="online-overlay" role="dialog" aria-modal="true" aria-label="Salon en ligne"><section id="online-panel"><h2>🌐 Salon multijoueur</h2><p class="muted">Prototype réseau : plateau partagé et tours synchronisés pour le jeu de base. Les mains ne sont pas encore privées et les règles avancées ne sont pas sécurisées. Ne pas utiliser pour une partie compétitive.</p><div id="online-join"><label>Pseudo <input id="online-name" maxlength="20" placeholder="Ton pseudo" autocomplete="nickname"></label><p><button id="online-create">Créer un salon</button></p><label>Code <input id="online-code" maxlength="8" placeholder="ABCDEFGH" autocapitalize="characters"></label><button id="online-join-btn">Rejoindre</button></div><div id="online-room" hidden><p>Code du salon : <span class="room-code" id="online-room-code"></span></p><button id="online-copy">Copier le lien d'invitation</button><p><strong>Joueurs connectés</strong></p><ol id="online-players"></ol><p id="online-game-note" class="muted">En attente du lancement par l’hôte.</p><button id="online-start" hidden>Démarrer le plateau partagé (jeu de base)</button><button id="online-leave">Quitter le salon</button></div><p id="online-status" role="status"></p><button onclick="window.onlineClose()" style="background:#637583">Fermer</button></section></div>
+<div id="online-overlay" role="dialog" aria-modal="true" aria-label="Salon en ligne"><section id="online-panel"><h2>🌐 Salon multijoueur</h2><p class="muted">Prototype réseau : plateau partagé et tours synchronisés pour le jeu de base. Les mains ne sont pas encore privées et les règles avancées ne sont pas sécurisées. Ne pas utiliser pour une partie compétitive.</p><div id="online-join"><label>Pseudo <input id="online-name" maxlength="20" placeholder="Ton pseudo" autocomplete="nickname"></label><p><button id="online-create">Créer un salon</button></p><label>Code <input id="online-code" maxlength="8" placeholder="ABCDEFGH" autocapitalize="characters"></label><button id="online-join-btn">Rejoindre</button></div><div id="online-room" hidden><p>Code du salon : <span class="room-code" id="online-room-code"></span></p><button id="online-copy">Copier le lien d'invitation</button><p><strong>Joueurs connectés</strong></p><ol id="online-players"></ol><p id="online-game-note" class="muted">En attente du lancement par l’hôte.</p><p class="muted"><strong>Commandes :</strong> pendant le placement initial, clique sur une intersection puis une arête. Après les placements, les boutons de construction, d'échange et de dés apparaissent dans l'interface de jeu sous le plateau. Le mode Villes et Chevaliers en réseau n'est pas encore disponible.</p><button id="online-start" hidden>Démarrer le plateau partagé (jeu de base)</button><button id="online-leave">Quitter le salon</button></div><p id="online-status" role="status"></p><button onclick="window.onlineClose()" style="background:#637583">Fermer</button></section></div>
 <script type="module">
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {getAuth,signInAnonymously,onAuthStateChanged} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
@@ -1084,17 +1105,23 @@ import {getDatabase,ref,get,set,runTransaction,onValue,serverTimestamp} from 'ht
 const config={apiKey:'AIzaSyDYUxcFo6f544wRCV2Z8rXReLVFxc4UESo',authDomain:'catan-4b4f8.firebaseapp.com',databaseURL:'https://catan-4b4f8-default-rtdb.europe-west1.firebasedatabase.app',projectId:'catan-4b4f8',appId:'1:132116093646:web:4b332a0df7c53592f10e9f'};
 const app=initializeApp(config),auth=getAuth(app),db=getDatabase(app);
 const el=id=>document.getElementById(id),status=t=>el('online-status').textContent=t;
-let room='',slot=-1,unsub=null,gameUnsub=null,uid='',gameRevision=-1,gameWriting=false,gameDirty=false,gameTimer=null;
+let room='',slot=-1,unsub=null,gameUnsub=null,uid='',gameRevision=-1,gameWriting=false,gameDirty=false,gameTimer=null,pendingRemote=null;
 const cleanName=()=>el('online-name').value.trim().slice(0,20)||'Joueur';
 function code(){const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='';const a=crypto.getRandomValues(new Uint8Array(8));for(const x of a)r+=alphabet[x%alphabet.length];return r}
 async function login(){if(auth.currentUser)return auth.currentUser;const cred=await signInAnonymously(auth);return cred.user}
 function updateGameNote(t){el('online-game-note').textContent=t}
-function syncGame(snapshot){if(!snapshot?.G)return;window.__net2d.load(snapshot)}
-function watchGame(c){if(gameUnsub)gameUnsub();gameRevision=-1;
+function syncGame(snapshot){if(!snapshot?.G)return;window.__net2d.load(snapshot);
+  document.body.classList.remove('lobby');
+  const mine=window.__net2d.slot, actor=snapshot.G.phase==='discard'&&snapshot.G.discardQueue?.length?snapshot.G.discardQueue[0].i:snapshot.G.cur;
+  el('online-entry').textContent='🌐 Salon '+room+' · '+(mine===actor?'À toi de jouer':'Tour de '+(snapshot.G.P[actor]?.name||'?'));
+  el('online-entry').title='Ouvrir le salon et consulter les joueurs';
+ }
+function watchGame(c){if(gameUnsub)gameUnsub();gameRevision=-1;pendingRemote=null;
  gameUnsub=onValue(ref(db,'rooms/'+c+'/game'),snap=>{const g=snap.val();if(!g)return;
   if(g.revision<=gameRevision)return;
   gameRevision=g.revision;
-  if(!gameWriting&&!gameDirty)syncGame(g.snapshot);
+  if(!gameWriting&&!gameDirty){try{syncGame(g.snapshot)}catch(err){console.error('[Catan réseau] Échec de restauration du plateau',err);status('Erreur de chargement du plateau : '+err.message)}}
+  else if(gameWriting||gameDirty)pendingRemote=g;
   updateGameNote('Plateau partagé · '+(g.snapshot?.G?.phase==='setup'?'Placement initial':g.snapshot?.G?.phase==='end'?'Partie terminée':'Tour de '+(g.snapshot?.G?.P?.[g.snapshot.G.cur]?.name||'?')));
  },e=>status('Lecture du plateau refusée : '+e.message));}
 function showRoom(c){room=c;window.__net2d.slot=slot;el('online-room').hidden=false;el('online-join').hidden=true;el('online-room-code').textContent=c;history.replaceState(null,'',location.pathname+location.search+'#salon='+c);if(unsub)unsub();
@@ -1110,11 +1137,14 @@ async function flushGame(){if(gameWriting||!gameDirty||!room)return;
  gameWriting=true;gameDirty=false;const payload=window.__net2d.export();const c=room;
  try{const r=ref(db,'rooms/'+c+'/game');const result=await runTransaction(r,old=>{
   if(!old||!payload)return;
+  // Ne jamais écraser une action adverse ni une version plus récente.
+  if(old.revision!==gameRevision || old.turnSlot!==slot)return;
   return {revision:old.revision+1,turnSlot:payload.G.cur,snapshot:payload};
  },{applyLocally:false});
- if(!result.committed){status('Action non synchronisée. Rechargement du plateau…');const fresh=(await get(r)).val();if(fresh)syncGame(fresh.snapshot)}
- }catch(e){status('Écriture du plateau refusée : '+e.message);const fresh=(await get(ref(db,'rooms/'+c+'/game'))).val();if(fresh)syncGame(fresh.snapshot)}
- finally{gameWriting=false;if(gameDirty)flushGame();}}
+ if(!result.committed){status('Conflit réseau : restauration de la dernière version du plateau.');gameDirty=false;const fresh=(await get(r)).val();if(fresh){gameRevision=fresh.revision;syncGame(fresh.snapshot)}}
+ else {gameRevision=result.snapshot.val().revision;status('Action synchronisée · révision '+gameRevision)}
+ }catch(e){status('Écriture du plateau refusée : '+e.message);gameDirty=false;try{const fresh=(await get(ref(db,'rooms/'+c+'/game'))).val();if(fresh){gameRevision=fresh.revision;syncGame(fresh.snapshot)}}catch{}}
+ finally{gameWriting=false;if(gameDirty)flushGame();else if(pendingRemote&&pendingRemote.revision>gameRevision){gameRevision=pendingRemote.revision;syncGame(pendingRemote.snapshot)}pendingRemote=null;}}
 window.__net2d.onDraw=scheduleGameWrite;
 el('online-start').onclick=async()=>{if(slot!==0||!room)return;
  try{const data=(await get(ref(db,'rooms/'+room))).val();if(!data||data.game)throw Error('Partie déjà démarrée.');
@@ -1124,7 +1154,9 @@ el('online-start').onclick=async()=>{if(slot!==0||!room)return;
   if(entries.some(([i],n)=>Number(i)!==n))throw Error('Les joueurs doivent occuper les places 1 à '+entries.length+'.');
   const snapshot=window.__net2d.begin(entries.map(([,p])=>p.name));
   await set(ref(db,'rooms/'+room+'/game'),{revision:0,turnSlot:0,snapshot});
-  status('Plateau partagé créé. Ferme cette fenêtre pour jouer.');
+  window.__net2d.active=true;window.__net2d.slot=slot;watchGame(room);
+  syncGame(snapshot);
+  status('Plateau partagé créé et chargé sur cet appareil. Ferme cette fenêtre pour jouer.');
  }catch(e){status('Démarrage impossible : '+e.message)}};
 
 async function join(c,create=false){try{status('Connexion à Firebase…');uid=(await login()).uid;const r=ref(db,'rooms/'+c);if(create){const result=await runTransaction(r,v=>v===null?{host:uid,createdAt:Date.now(),status:'waiting',slots:{'0':{uid,name:cleanName()}}}:undefined,{applyLocally:false});if(!result.committed)throw Error('Code déjà utilisé. Réessaie.');slot=0}else{const data=(await get(r)).val();if(!data)throw Error('Salon introuvable.');if(data.status!=='waiting')throw Error('Salon fermé.');const own=Object.entries(data.slots||{}).find(([,p])=>p?.uid===uid);if(own){slot=Number(own[0])}else{let ok=false;for(let i=0;i<4;i++){const x=ref(db,'rooms/'+c+'/slots/'+i);const result=await runTransaction(x,v=>v===null?{uid,name:cleanName()}:undefined,{applyLocally:false});if(result.committed){slot=i;ok=true;break}}if(!ok)throw Error('Salon complet (4 joueurs).')}}showRoom(c)}catch(e){status('Erreur : '+e.message)}}
