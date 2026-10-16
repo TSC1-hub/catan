@@ -584,13 +584,13 @@ function canS(v,p){if(v.o>=0||v.kn||v.adj.some(a=>V.get(a).o>=0))return false;
  return G.phase=='setup'||v.es.some(e=>E.get(e).o===p)}
 function canR(e,p){if(e.o>=0)return false;if(G.phase!=='setup'&&[...E.values()].filter(x=>x.o===p).length>=15)return false;if(G.phase=='setup')return e.a===G.last||e.b===G.last;
  return[e.a,e.b].some(k=>{const v=V.get(k);return v.o===p||(v.o<0&&v.es.some(x=>E.get(x).o===p))})}
-function vc(k){const v=V.get(k),p=G.P[G.cur];
+function vc(k){if(window.__net2d?.active&&G?.phase==='setup'){window.__net2d.setupAction('POSER_COLONIE',k);return}const v=V.get(k),p=G.P[G.cur];
  if(G.phase=='setup'&&G.step=='settle'&&canS(v,G.cur)){v.o=G.cur;if(G.ck&&G.si>=G.n)v.c=1;G.last=k;G.step='road';
   if(G.si>=G.n)v.hs.forEach(i=>{const t=H[i].t;if(t!='d'){const available=19-G.P.reduce((sum,q)=>sum+q.r[t],0);if(available>0){p.r[t]++;G.fx.push({i,o:G.cur,t,c:1,dl:350})}}});log(p.name+(v.c?' pose une ville':' pose une colonie')+', puis une route.')}
  else if(G.phase=='main'&&G.mode=='settle'&&canS(v,G.cur)&&[...V.values()].filter(x=>x.o===G.cur&&!x.c).length<5&&aff(p,COST.settle)){pay(p,COST.settle);v.o=G.cur;G.mode=null;log(p.name+' construit une colonie.')}
  else if(G.phase=='main'&&G.mode=='city'&&v.o===G.cur&&!v.c&&[...V.values()].filter(x=>x.o===G.cur&&x.c).length<4&&aff(p,COST.city)){pay(p,COST.city);v.c=1;G.mode=null;log(p.name+' construit une ville.')}else if(G.phase=='main'&&G.ck&&kn(v));
  uLR();win();draw()}
-function ec(k){const e=E.get(k),p=G.P[G.cur];
+function ec(k){if(window.__net2d?.active&&G?.phase==='setup'){window.__net2d.setupAction('POSER_ROUTE',k);return}const e=E.get(k),p=G.P[G.cur];
  if(G.phase=='setup'&&G.step=='road'&&canR(e,G.cur)){e.o=G.cur;G.si++;
   if(G.si>=G.seq.length){G.phase='roll';G.cur=0;log('À toi de lancer les dés, '+G.P[0].name+'.')}else{G.cur=G.seq[G.si];G.step='settle'}}
  else if(G.phase=='main'&&G.mode=='road'&&canR(e,G.cur)&&[...E.values()].filter(x=>x.o===G.cur).length<15&&(G.free||aff(p,COST.road))){if(G.free){G.free--;G.mode=G.free?'road':null}else{pay(p,COST.road);G.mode=null}e.o=G.cur;log(p.name+' construit une route.')}
@@ -1058,10 +1058,55 @@ function draw(){
  if(G&&G.ck&&selectedProgress!==null){document.body.insertAdjacentHTML('beforeend',progressPreview(G.P[G.cur]));}
  }
 
+// Étape 2 : transition pure du placement initial, adaptée au schéma réel V/E/G.
+// Aucun DOM, aucune écriture Firebase et aucune mutation de l'état reçu.
+function transitionPlacement(state,action){
+ const s=structuredClone(state);
+ if(s.G.phase!=='setup'||action.joueur!==s.G.cur)throw Error('Action hors tour ou hors placement');
+ const g=s.G;
+ if(action.type==='POSER_COLONIE'){
+  if(g.step!=='settle')throw Error('Une route est attendue');
+  const v=s.V.find(([key])=>key===action.cle)?.[1];
+  if(!v||v.o>=0||v.kn||v.adj.some(key=>s.V.find(([k])=>k===key)?.[1]?.o>=0))throw Error('Emplacement de colonie interdit');
+  v.o=g.cur;if(g.ck&&g.si>=g.n)v.c=1;
+  g.last=action.cle;g.step='road';
+  return s;
+ }
+ if(action.type==='POSER_ROUTE'){
+  if(g.step!=='road')throw Error('Une colonie est attendue');
+  const e=s.E.find(([key])=>key===action.cle)?.[1];
+  if(!e||e.o>=0||(e.a!==g.last&&e.b!==g.last))throw Error('Emplacement de route interdit');
+  e.o=g.cur;g.si++;
+  if(g.si>=g.seq.length){g.phase='roll';g.cur=0;g.step=null}
+  else{g.cur=g.seq[g.si];g.step='settle'}
+  return s;
+ }
+ throw Error('Action de placement inconnue');
+}
 // Passerelle expérimentale pour le plateau partagé (jeu de base uniquement).
 // Correctif V6: une route de placement change G.cur avant draw(); l'écriture ne doit pas être bloquée par canAct().
 // Le mode local continue d'utiliser exactement le moteur original.
-window.__net2d={active:false,slot:-1,remote:false,onDraw:null,
+window.__net2d={active:false,slot:-1,remote:false,onDraw:null,onAction:null,writePending:false,
+ setupAction(type,key){
+  if(this.writePending){console.warn('[Catan réseau] Action en attente de validation Firebase');return}
+  if(!this.canAct())return;
+  const before=this.export();
+  try{
+   const next=transitionPlacement(before,{type,cle:key,joueur:this.slot});
+   const old=G,player=old.P[old.cur];
+   G=next.G;V=new Map(next.V);E=new Map(next.E);
+   if(type==='POSER_COLONIE'){
+    const v=V.get(key);
+    if(old.si>=old.n)v.hs.forEach(i=>{const t=H[i].t;if(t!=='d'){
+     const available=19-G.P.reduce((sum,q)=>sum+(q.r[t]||0),0);
+     if(available>0){G.P[this.slot].r[t]++;G.fx.push({i,o:this.slot,t,c:1,dl:350})}
+    }});
+    log(player.name+(v.c?' pose une ville':' pose une colonie')+', puis une route.');
+   }else if(G.phase==='roll')log('À toi de lancer les dés, '+G.P[0].name+'.');
+   uLR();win();this.writePending=true;draw();
+   if(this.onAction)this.onAction();
+  }catch(err){console.warn('[Catan réseau] Placement refusé',err);if(window.__net2d.onError)window.__net2d.onError(err.message)}
+ },onError:null,
  export(){if(!G)return null;return {G:JSON.parse(JSON.stringify(G,(k,v)=>v instanceof Set?[...v]:v)),H:JSON.parse(JSON.stringify(H)),V:JSON.parse(JSON.stringify([...V.entries()])),E:JSON.parse(JSON.stringify([...E.entries()])),PT:JSON.parse(JSON.stringify(PT)),cfg:{ck:cfg.ck,vp:cfg.vp,lim:cfg.lim,bal:cfg.bal,fr:cfg.fr,map:cfg.map}}},
  load(snapshot){if(!snapshot||!snapshot.G)return;this.remote=true;try{G=snapshot.G;
  // Firebase RTDB supprime les tableaux vides dans les objets JSON.
@@ -1090,9 +1135,9 @@ window.__net2d={active:false,slot:-1,remote:false,onDraw:null,
 };
 // Tolérance supplémentaire aux tableaux vides omis par Firebase.
 const __netOriginalDraw=draw;
-draw=function(){__netOriginalDraw();if(window.__net2d.active&&!window.__net2d.remote&&G&&window.__net2d.onDraw)window.__net2d.onDraw()};
+draw=function(){__netOriginalDraw()}; // L'affichage ne provoque jamais d'écriture réseau.
 // Interdire l'interaction sur les autres postes lorsque ce n'est pas leur tour.
-function __netBlock(ev){const n=window.__net2d;if(!n.active||!G||n.canAct())return;
+function __netBlock(ev){const n=window.__net2d;if(!n.active||!G||(!n.writePending&&n.canAct()))return;
  const target=ev.target;if(target?.closest?.('#online-overlay,#online-entry'))return;
  if(ev.type==='keydown' && ![' ','r','R','s','S','c','C'].includes(ev.key))return;
  ev.preventDefault();ev.stopImmediatePropagation();}
@@ -1134,20 +1179,26 @@ function showRoom(c){room=c;window.__net2d.slot=slot;el('online-room').hidden=fa
   if(!d.game)status('Salon synchronisé. L’hôte peut démarrer avec 2 à 4 joueurs.');
  },e=>status('Lecture refusée : '+e.message));}
 function scheduleGameWrite(){if(!window.__net2d.active||window.__net2d.remote||!room)return;
- gameDirty=true;clearTimeout(gameTimer);gameTimer=setTimeout(flushGame,120);}
+ gameDirty=true;clearTimeout(gameTimer);gameTimer=setTimeout(flushGame,0);}
 async function flushGame(){if(gameWriting||!gameDirty||!room)return;
- gameWriting=true;gameDirty=false;const payload=window.__net2d.export();const c=room;const baseRevision=gameRevision;
- try{const r=ref(db,'rooms/'+c+'/game');const result=await runTransaction(r,old=>{
+ gameWriting=true;gameDirty=false;const payload=window.__net2d.export();const c=room;
+ try{const r=ref(db,'rooms/'+c+'/game');
+ // Lire l'état serveur avant la transaction : le cache local peut être vide
+ // ou la révision initiale ne pas être encore arrivée sur cet appareil.
+ const server=(await get(r)).val();
+ if(!server)throw Error('Partie introuvable sur Firebase');
+ const baseRevision=gameRevision<0?server.revision:gameRevision;
+ const result=await runTransaction(r,old=>{
   if(!old||!payload)return;
   // Ne jamais écraser une action adverse ni une version plus récente.
   if(old.revision!==baseRevision || old.turnSlot!==slot)return;
   return {revision:old.revision+1,turnSlot:payload.G.cur,snapshot:payload};
  },{applyLocally:false});
- if(!result.committed){status('Conflit réseau : restauration de la dernière version du plateau.');gameDirty=false;const fresh=(await get(r)).val();if(fresh){gameRevision=fresh.revision;syncGame(fresh.snapshot)}}
- else {gameRevision=result.snapshot.val().revision;status('Action synchronisée · révision '+gameRevision)}
- }catch(e){status('Écriture du plateau refusée : '+e.message);gameDirty=false;try{const fresh=(await get(ref(db,'rooms/'+c+'/game'))).val();if(fresh){gameRevision=fresh.revision;syncGame(fresh.snapshot)}}catch{}}
- finally{gameWriting=false;if(gameDirty)flushGame();else if(pendingRemote&&pendingRemote.revision>gameRevision){gameRevision=pendingRemote.revision;syncGame(pendingRemote.snapshot)}pendingRemote=null;}}
-window.__net2d.onDraw=scheduleGameWrite;
+ if(!result.committed){status('Action refusée par Firebase (révision '+baseRevision+', joueur '+slot+'). Ancien plateau restauré.');gameDirty=false;const fresh=(await get(r)).val();if(fresh){gameRevision=fresh.revision;syncGame(fresh.snapshot)}}
+ else {gameRevision=result.snapshot.val().revision;status('Action synchronisée · révision '+gameRevision);el('online-entry').title='Action enregistrée sur Firebase · révision '+gameRevision}
+ }catch(e){console.error('[Catan réseau] Écriture Firebase impossible',e);status('Écriture du plateau refusée : '+e.message);el('online-entry').title='Erreur Firebase : '+e.message;gameDirty=false;try{const fresh=(await get(ref(db,'rooms/'+c+'/game'))).val();if(fresh){gameRevision=fresh.revision;syncGame(fresh.snapshot)}}catch{}}
+ finally{gameWriting=false;window.__net2d.writePending=false;if(gameDirty)flushGame();else if(pendingRemote&&pendingRemote.revision>gameRevision){gameRevision=pendingRemote.revision;syncGame(pendingRemote.snapshot)}pendingRemote=null;}}
+window.__net2d.onAction=scheduleGameWrite;window.__net2d.onError=status;
 el('online-start').onclick=async()=>{if(slot!==0||!room)return;
  try{const data=(await get(ref(db,'rooms/'+room))).val();if(!data||data.game)throw Error('Partie déjà démarrée.');
   const entries=Object.entries(data.slots||{}).sort(([a],[b])=>Number(a)-Number(b));
@@ -1157,7 +1208,8 @@ el('online-start').onclick=async()=>{if(slot!==0||!room)return;
   const snapshot=window.__net2d.begin(entries.map(([,p])=>p.name));
   await set(ref(db,'rooms/'+room+'/game'),{revision:0,turnSlot:0,snapshot});
   window.__net2d.active=true;window.__net2d.slot=slot;watchGame(room);
-  syncGame(snapshot);
+  // L'hôte connaît déjà la révision initiale; ne pas attendre le premier onValue.
+  gameRevision=0;syncGame(snapshot);
   status('Plateau partagé créé et chargé sur cet appareil. Ferme cette fenêtre pour jouer.');
  }catch(e){status('Démarrage impossible : '+e.message)}};
 
